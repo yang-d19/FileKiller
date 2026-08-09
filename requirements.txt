@@ -1,4 +1,7 @@
-PyQt6>=6.7.0
+# Qt 6.11.1 fails to load its runtime DLLs in the supported Windows setup.
+# Keep the application on the known-good Qt 6.7 release line.
+PyQt6==6.7.1
+PyQt6-Qt6==6.7.3
 send2trash>=1.8.3
 pyinstaller>=6.0.0
 opencv-python>=4.11.0

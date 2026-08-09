@@ -1,6 +1,14 @@
 import sys
 import os
 import winreg
+
+# The PyQt6 Windows wheel exposes both FFmpeg and Windows Media Foundation
+# backends, but its FFmpeg plugin may be installed without the matching FFmpeg
+# DLLs.  Qt otherwise picks that unusable backend and QMediaPlayer stays silent.
+# Select the native Windows backend before importing QtMultimedia.
+if sys.platform == "win32":
+    os.environ["QT_MEDIA_BACKEND"] = "windows"
+
 from PyQt6.QtWidgets import QApplication, QWidget, QLabel, QPushButton, QVBoxLayout, QHBoxLayout, QGraphicsDropShadowEffect
 from PyQt6.QtCore import Qt, QTimer, QPropertyAnimation, QPoint, QEasingCurve, pyqtSignal, QUrl, pyqtProperty
 from PyQt6.QtGui import QPixmap, QPainter, QColor, QTransform, QImage, QPainterPath, QCursor, QPen
