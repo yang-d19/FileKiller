@@ -1,0 +1,65 @@
+{
+  "schema_version": 1,
+  "resources": {
+    "background": "../assets/选择界面/选择界面.png",
+    "audio": {
+      "bgm": {
+        "path": "../assets/音频/bgm(1).mp3",
+        "volume": 0.5
+      },
+      "voice": {
+        "path": "../assets/音频/怪兽说话.mp3",
+        "volume": 1.0
+      },
+      "explosion": {
+        "path": "../assets/音频/爆炸.MP4",
+        "volume": 0.3
+      }
+    },
+    "sprites": {
+      "walk": {
+        "path": "../assets/走路动效_spritesheet_transparent.png",
+        "cols": 5,
+        "rows": 3,
+        "target_height": 250,
+        "fps": 8
+      },
+      "point": {
+        "path": "../assets/指着文件_spritesheet_transparent.png",
+        "cols": 5,
+        "rows": 3,
+        "target_height": 250,
+        "fps": 8,
+        "frame_indices": [11, 12, 13, 14]
+      },
+      "kick": {
+        "path": "../assets/踹文件动效_spritesheet_transparent.png",
+        "cols": 5,
+        "rows": 3,
+        "target_height": 250,
+        "fps": 8
+      },
+      "explosion": {
+        "path": "../assets/爆炸_spritesheet_transparent.png",
+        "cols": 5,
+        "rows": 3,
+        "target_height": 150,
+        "fps": 8
+      },
+      "arrival": {
+        "path": "../assets/雷欧登场_spritesheet_transparent.png",
+        "cols": 5,
+        "rows": 3,
+        "target_height": 250,
+        "fps": 8
+      },
+      "departure": {
+        "path": "../assets/出场飞行动效_spritesheet_transparent.png",
+        "cols": 5,
+        "rows": 3,
+        "target_height": 250,
+        "fps": 8
+      }
+    }
+  }
+}

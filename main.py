@@ -1,3 +1,5 @@
+import argparse
+import math
 import sys
 import os
 import winreg
@@ -13,29 +15,23 @@ from PyQt6.QtWidgets import QApplication, QWidget, QLabel, QPushButton, QVBoxLay
 from PyQt6.QtCore import Qt, QTimer, QPropertyAnimation, QPoint, QEasingCurve, pyqtSignal, QUrl, pyqtProperty
 from PyQt6.QtGui import QPixmap, QPainter, QColor, QTransform, QImage, QPainterPath, QCursor, QPen
 from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
+from resource_config import CONFIG_ENV_VAR, ResourceConfig, ResourceConfigError
 
-def get_resource_path(relative_path):
-    try:
-        base_path = sys._MEIPASS
-    except Exception:
-        base_path = os.path.dirname(os.path.abspath(__file__))
-    return os.path.join(base_path, relative_path)
-
-SPRITE_DIR = get_resource_path("assets")
 COLS = 5
 ROWS = 3
 
-def register_context_menu():
+def register_context_menu(config_path=None):
     try:
+        config_argument = f' --config "{os.path.abspath(config_path)}"' if config_path else ""
         exe_path = sys.executable
         if not exe_path.lower().endswith('.exe') or 'python' in exe_path.lower():
             # If running from python script, use the old command
             exe_path = sys.executable
             script_path = os.path.abspath(__file__)
-            command_str = f'"{exe_path}" "{script_path}" "%1"'
+            command_str = f'"{exe_path}" "{script_path}"{config_argument} "%1"'
             icon_str = "shell32.dll,32"
         else:
-            command_str = f'"{exe_path}" "%1"'
+            command_str = f'"{exe_path}"{config_argument} "%1"'
             icon_str = f'"{exe_path}",0'
             
         key_path = r"Software\Classes\*\shell\SummonMonster"
@@ -64,12 +60,10 @@ class SpriteAnimator(QLabel):
         self.loop = True
         self.flip_horizontal = False
         self.is_playing = False
+        self.start_frame = 0
+        self.position_offset_y = 0
 
     def load_spritesheet(self, filepath, cols=COLS, rows=ROWS, target_height=250, frame_indices=None):
-        transparent_path = filepath.replace(".png", "_transparent.png")
-        if os.path.exists(transparent_path):
-            filepath = transparent_path
-            
         if not os.path.exists(filepath):
             print(f"Error: Sprite not found at {filepath}")
             return False
@@ -93,7 +87,11 @@ class SpriteAnimator(QLabel):
                 
         if frame_indices is not None:
             self.frames = [self.frames[i] for i in frame_indices if i < len(self.frames)]
-                
+
+        if not self.frames:
+            print(f"Error: Sprite configuration selected no frames from {filepath}")
+            return False
+
         if self.frames:
             self.resize(self.frames[0].size())
         return True
@@ -104,7 +102,7 @@ class SpriteAnimator(QLabel):
 
     def play(self, fps=8, loop=True):
         self.loop = loop
-        self.current_frame = 0
+        self.current_frame = self.start_frame % len(self.frames) if self.frames else 0
         self.is_playing = True
         self.timer.start(1000 // fps)
         self._update_frame()
@@ -261,12 +259,19 @@ class ChoicesWidget(QWidget):
         
 
 class MonsterDeleter(QWidget):
-    def __init__(self, target_file):
+    def __init__(self, target_file, resources=None):
         super().__init__()
         self.target_file = target_file
+        self.resources = resources or ResourceConfig.load()
         self.target_pos = None
         self._bg_opacity = 0.0
         self.monster_sequence_started = False
+
+        self.background_image = QImage(self.resources.background_path)
+        if self.background_image.isNull():
+            raise ResourceConfigError(
+                f"Unable to load background image: {self.resources.background_path}"
+            )
         
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.Tool)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
@@ -279,6 +284,12 @@ class MonsterDeleter(QWidget):
         
         self.explosion_animator = SpriteAnimator(self)
         self.explosion_animator.hide()
+
+        self.below_target_animators = []
+        self.orbit_labels = []
+        self.orbit_angle = 0.0
+        self.orbit_timer = QTimer(self)
+        self.orbit_timer.timeout.connect(self.update_satellite_orbit)
         
         self.bubble = BubbleWidget("喂，是这个吗？")
         self.choices = ChoicesWidget()
@@ -299,29 +310,53 @@ class MonsterDeleter(QWidget):
 
     def init_audio(self):
         # Background Music
+        bgm = self.resources.audio("bgm")
         self.bgm_player = QMediaPlayer()
         self.bgm_audio = QAudioOutput()
         self.bgm_player.setAudioOutput(self.bgm_audio)
-        bgm_path = get_resource_path(r"assets\音频\bgm(1).mp3")
-        self.bgm_player.setSource(QUrl.fromLocalFile(bgm_path))
-        self.bgm_audio.setVolume(0.5)
+        self.bgm_player.setSource(QUrl.fromLocalFile(bgm["path"]))
+        self.bgm_audio.setVolume(bgm["volume"])
         self.bgm_player.mediaStatusChanged.connect(self.loop_bgm)
         
         # Sound Effects
+        voice = self.resources.audio("voice")
         self.sfx_player = QMediaPlayer()
         self.sfx_audio = QAudioOutput()
         self.sfx_player.setAudioOutput(self.sfx_audio)
-        sfx_path = get_resource_path(r"assets\音频\怪兽说话.mp3")
-        self.sfx_player.setSource(QUrl.fromLocalFile(sfx_path))
-        self.sfx_audio.setVolume(1.0)
+        self.sfx_player.setSource(QUrl.fromLocalFile(voice["path"]))
+        self.sfx_audio.setVolume(voice["volume"])
         
         # Explosion Sound
+        explosion = self.resources.audio("explosion")
         self.exp_player = QMediaPlayer()
         self.exp_audio = QAudioOutput()
         self.exp_player.setAudioOutput(self.exp_audio)
-        exp_path = get_resource_path(r"assets\音频\爆炸.MP4")
-        self.exp_player.setSource(QUrl.fromLocalFile(exp_path))
-        self.exp_audio.setVolume(0.3)
+        self.exp_player.setSource(QUrl.fromLocalFile(explosion["path"]))
+        self.exp_audio.setVolume(explosion["volume"])
+
+        # Optional post-destruction voice configured by individual themes.
+        self.victory_player = None
+        self.victory_audio = None
+        victory = self.resources.optional_audio("victory")
+        if victory:
+            self.victory_player = QMediaPlayer()
+            self.victory_audio = QAudioOutput()
+            self.victory_player.setAudioOutput(self.victory_audio)
+            self.victory_player.setSource(QUrl.fromLocalFile(victory["path"]))
+            self.victory_audio.setVolume(victory["volume"])
+
+    def load_sprite(self, animator, name):
+        spec = self.resources.sprite(name)
+        return self.load_sprite_spec(animator, spec, name)
+
+    def load_sprite_spec(self, animator, spec, label):
+        fps = spec.pop("fps")
+        filepath = spec.pop("path")
+        animator.start_frame = spec.pop("start_frame", 0)
+        animator.position_offset_y = spec.pop("offset_y", 0)
+        if not animator.load_spritesheet(filepath, **spec):
+            raise ResourceConfigError(f"Unable to load sprite resource: {label}")
+        return fps
 
     def loop_bgm(self, status):
         if status == QMediaPlayer.MediaStatus.EndOfMedia:
@@ -366,26 +401,13 @@ class MonsterDeleter(QWidget):
     def paintEvent(self, event):
         if self._bg_opacity > 0.01:
             painter = QPainter(self)
-            
-            # Draw semi-transparent background image
-            bg_image_path = ""
-            for ext in [".png", ".jpg", ".jpeg"]:
-                test_path = get_resource_path(rf"assets\选择界面\选择界面{ext}")
-                if os.path.exists(test_path):
-                    bg_image_path = test_path
-                    break
-                    
-            if os.path.exists(bg_image_path):
-                bg_image = QImage(bg_image_path)
-                if not bg_image.isNull():
-                    painter.setOpacity(self._bg_opacity) # Animated opacity
-                    scaled_img = bg_image.scaled(self.size(), Qt.AspectRatioMode.KeepAspectRatioByExpanding, Qt.TransformationMode.SmoothTransformation)
-                    x = (self.width() - scaled_img.width()) // 2
-                    y = (self.height() - scaled_img.height()) // 2
-                    painter.drawImage(x, y, scaled_img)
-            else:
-                painter.setOpacity(self._bg_opacity)
-                painter.fillRect(self.rect(), QColor(0, 0, 0, 160))
+
+            # Draw the background selected by the active resource configuration.
+            painter.setOpacity(self._bg_opacity) # Animated opacity
+            scaled_img = self.background_image.scaled(self.size(), Qt.AspectRatioMode.KeepAspectRatioByExpanding, Qt.TransformationMode.SmoothTransformation)
+            x = (self.width() - scaled_img.width()) // 2
+            y = (self.height() - scaled_img.height()) // 2
+            painter.drawImage(x, y, scaled_img)
                 
             # Scale text opacity relative to bg_opacity max (0.35)
             text_opacity = min(1.0, self._bg_opacity / 0.35)
@@ -402,6 +424,7 @@ class MonsterDeleter(QWidget):
             self.target_pos = event.pos()
             self.monster_sequence_started = True
             self.setCursor(Qt.CursorShape.ArrowCursor)
+            self.start_satellite_orbit()
             
             self.fade_out_anim = QPropertyAnimation(self, b"bg_opacity")
             self.fade_out_anim.setDuration(500)
@@ -413,23 +436,84 @@ class MonsterDeleter(QWidget):
     def init_monster_sequence(self):
         self.start_phase1_walk()
 
+    def start_satellite_orbit(self):
+        effect = self.resources.orbit_effect()
+        if not effect or self.target_pos is None:
+            return
+
+        self.stop_satellite_orbit()
+        source = QPixmap(effect["path"])
+        if source.isNull():
+            raise ResourceConfigError(
+                f"Unable to load orbit resource: {effect['path']}"
+            )
+
+        sprite = source.scaledToWidth(
+            effect["target_width"], Qt.TransformationMode.SmoothTransformation
+        )
+        self.orbit_effect_spec = effect
+        self.orbit_angle = 0.0
+        for _index in range(effect["count"]):
+            label = QLabel(self)
+            label.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+            label.setPixmap(sprite)
+            label.resize(sprite.size())
+            label.show()
+            self.orbit_labels.append(label)
+
+        self.update_satellite_orbit()
+        self.orbit_timer.start(max(1, 1000 // effect["fps"]))
+
+    def update_satellite_orbit(self):
+        if not self.orbit_labels or self.target_pos is None:
+            return
+
+        effect = self.orbit_effect_spec
+        phase_step = 360.0 / len(self.orbit_labels)
+        for index, label in enumerate(self.orbit_labels):
+            angle = math.radians(self.orbit_angle + index * phase_step)
+            center_x = self.target_pos.x() + math.cos(angle) * effect["radius_x"]
+            center_y = self.target_pos.y() + math.sin(angle) * effect["radius_y"]
+            label.move(
+                round(center_x - label.width() / 2),
+                round(center_y - label.height() / 2),
+            )
+            label.raise_()
+
+        self.orbit_angle = (
+            self.orbit_angle + effect["speed_dps"] / effect["fps"]
+        ) % 360.0
+
+    def stop_satellite_orbit(self):
+        self.orbit_timer.stop()
+        for label in self.orbit_labels:
+            label.hide()
+            label.deleteLater()
+        self.orbit_labels.clear()
+
     def start_phase1_walk(self):
         
         # Start playing BGM here
         self.bgm_player.play()
+        self.start_below_target_animations()
         
-        self.animator.load_spritesheet(os.path.join(SPRITE_DIR, "走路动效_spritesheet.png"))
+        fps = self.load_sprite(self.animator, "walk")
         
         screen = QApplication.primaryScreen().geometry()
         start_x = -self.animator.width()
-        start_y = self.target_pos.y() - self.animator.height() // 2 + 50 # Move pet down
+        start_y = (
+            self.target_pos.y()
+            - self.animator.height() // 2
+            + 50
+            + self.animator.position_offset_y
+        )
         
         self.from_right = False
         self.animator.set_flip(False) 
             
         self.animator.move(start_x, start_y)
         self.animator.show()
-        self.animator.play(fps=8, loop=True)
+        self.animator.play(fps=fps, loop=True)
         
         self.move_anim = QPropertyAnimation(self.animator, b"pos")
         self.move_anim.setDuration(4500) # Slower walking speed
@@ -447,8 +531,8 @@ class MonsterDeleter(QWidget):
         # Play SFX once when pointing animation starts
         self.sfx_player.play()
         
-        # Phase 2: Pointing (Play ONCE, frames 11-14 only)
-        self.animator.load_spritesheet(os.path.join(SPRITE_DIR, "指着文件_spritesheet.png"), frame_indices=[11, 12, 13, 14])
+        # Phase 2: Pointing (Play ONCE using the frames selected by the skin.)
+        fps = self.load_sprite(self.animator, "point")
         
         try:
             self.animator.animationFinished.disconnect()
@@ -456,7 +540,7 @@ class MonsterDeleter(QWidget):
             pass
             
         self.animator.animationFinished.connect(self.show_dialog)
-        self.animator.play(fps=8, loop=False)
+        self.animator.play(fps=fps, loop=False)
 
     def show_dialog(self):
         try:
@@ -492,10 +576,10 @@ class MonsterDeleter(QWidget):
         except TypeError:
             pass
             
-        self.animator.load_spritesheet(os.path.join(SPRITE_DIR, "踹文件动效_spritesheet.png"))
+        fps = self.load_sprite(self.animator, "kick")
         self.animator.animationFinished.connect(self.on_kick_finished)
         self.animator.frameChanged.connect(self.on_kick_frame)
-        self.animator.play(fps=8, loop=False)
+        self.animator.play(fps=fps, loop=False)
 
     def on_kick_frame(self, frame_idx):
         # Trigger explosion precisely on the 6th frame (index 5)
@@ -503,11 +587,12 @@ class MonsterDeleter(QWidget):
             self.trigger_explosion()
 
     def trigger_explosion(self):
+        self.stop_satellite_orbit()
+
         # Play explosion sound
         self.exp_player.play()
         
-        # Slightly larger explosion (150 instead of 100)
-        self.explosion_animator.load_spritesheet(os.path.join(SPRITE_DIR, "爆炸_spritesheet.png"), target_height=150)
+        fps = self.load_sprite(self.explosion_animator, "explosion")
         
         # Center explosion slightly higher to cover the file icon properly
         exp_x = self.target_pos.x() - self.explosion_animator.width() // 2
@@ -521,19 +606,71 @@ class MonsterDeleter(QWidget):
             pass
             
         self.explosion_animator.animationFinished.connect(self.explosion_animator.hide)
-        self.explosion_animator.play(fps=8, loop=False)
-        
+        self.explosion_animator.play(fps=fps, loop=False)
+
         # We can trigger the file deletion here to perfectly sync with explosion
-        self.delete_target_file()
+        if self.delete_target_file():
+            self.play_victory_voice()
+
+    def play_victory_voice(self):
+        if self.victory_player is not None:
+            self.victory_player.setPosition(0)
+            self.victory_player.play()
+
+    def start_below_target_animations(self):
+        group = self.resources.animation_group("below_target")
+        if not group:
+            return
+
+        self.stop_below_target_animations()
+        loaded = []
+        for index, spec in enumerate(group["items"]):
+            animator = SpriteAnimator(self)
+            fps = self.load_sprite_spec(
+                animator, spec, f"animations.below_target[{index}]"
+            )
+            loaded.append((animator, fps))
+
+        spacing = group["spacing"]
+        total_width = sum(animator.width() for animator, _fps in loaded)
+        total_width += spacing * (len(loaded) - 1)
+        max_height = max(animator.height() for animator, _fps in loaded)
+
+        desired_x = self.target_pos.x() - total_width // 2
+        start_x = max(0, min(desired_x, max(0, self.width() - total_width)))
+        desired_y = self.target_pos.y() + group["offset_y"]
+        top_y = max(0, min(desired_y, max(0, self.height() - max_height)))
+
+        current_x = start_x
+        for animator, fps in loaded:
+            animator.move(current_x, top_y + max_height - animator.height())
+            animator.show()
+            animator.play(fps=fps, loop=True)
+            self.below_target_animators.append(animator)
+            current_x += animator.width() + spacing
+
+        if group["duration_ms"] > 0:
+            QTimer.singleShot(
+                group["duration_ms"], self.stop_below_target_animations
+            )
+
+    def stop_below_target_animations(self):
+        for animator in self.below_target_animators:
+            animator.stop()
+            animator.hide()
+            animator.deleteLater()
+        self.below_target_animators.clear()
 
     def delete_target_file(self):
         try:
             from send2trash import send2trash
-            if os.path.exists(self.target_file):
+            if self.target_file and os.path.exists(self.target_file):
                 send2trash(self.target_file)
                 print(f"Moved to trash: {self.target_file}")
+                return True
         except Exception as e:
             print(f"Error: {e}")
+        return False
 
     def on_kick_finished(self):
         try:
@@ -545,9 +682,9 @@ class MonsterDeleter(QWidget):
         self.start_phase4_leo()
 
     def start_phase4_leo(self):
-        self.animator.load_spritesheet(os.path.join(SPRITE_DIR, "雷欧登场_spritesheet.png"))
+        fps = self.load_sprite(self.animator, "arrival")
         self.animator.animationFinished.connect(self.start_phase5_fly)
-        self.animator.play(fps=8, loop=False)
+        self.animator.play(fps=fps, loop=False)
 
     def start_phase5_fly(self):
         try:
@@ -555,8 +692,8 @@ class MonsterDeleter(QWidget):
         except TypeError:
             pass
             
-        self.animator.load_spritesheet(os.path.join(SPRITE_DIR, "出场飞行动效_spritesheet.png"))
-        self.animator.play(fps=8, loop=True)
+        fps = self.load_sprite(self.animator, "departure")
+        self.animator.play(fps=fps, loop=True)
         
         screen = QApplication.primaryScreen().geometry()
         self.move_anim2 = QPropertyAnimation(self.animator, b"pos")
@@ -573,21 +710,42 @@ class MonsterDeleter(QWidget):
 
     def on_app_exit(self):
         # Explicitly stop multimedia to free resources and stop background audio
+        self.stop_satellite_orbit()
+        self.stop_below_target_animations()
         self.bgm_player.stop()
         self.sfx_player.stop()
         self.exp_player.stop()
+        if self.victory_player is not None:
+            self.victory_player.stop()
         self.close()
         QApplication.quit()
         sys.exit(0)
 
+
+def parse_arguments(argv=None):
+    parser = argparse.ArgumentParser(description="Desktop Monster Deleter")
+    parser.add_argument(
+        "--config",
+        help=(
+            "Resource configuration JSON. Relative resource paths inside it are "
+            "resolved from the configuration file's directory."
+        ),
+    )
+    parser.add_argument("target", nargs="?", help="File to move to the recycle bin")
+    return parser.parse_args(argv)
+
+
 if __name__ == '__main__':
-    register_context_menu()
-    
-    target = None
-    if len(sys.argv) >= 2:
-        target = sys.argv[1]
-        
-    app = QApplication(sys.argv)
-    ex = MonsterDeleter(target)
+    args = parse_arguments()
+    config_override = args.config or os.environ.get(CONFIG_ENV_VAR)
+    try:
+        resources = ResourceConfig.load(config_override)
+    except ResourceConfigError as exc:
+        raise SystemExit(f"Configuration error: {exc}") from exc
+
+    register_context_menu(resources.source_path if config_override else None)
+
+    app = QApplication([sys.argv[0]])
+    ex = MonsterDeleter(args.target, resources)
     ex.show()
     sys.exit(app.exec())

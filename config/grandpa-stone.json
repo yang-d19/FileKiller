@@ -1,0 +1,119 @@
+{
+  "schema_version": 1,
+  "resources": {
+    "background": "../assets/themes/grandpa-stone/background.png",
+    "audio": {
+      "bgm": {
+        "path": "../assets/themes/grandpa-stone/audio/ni-ruo-san-dong-dj.mp3",
+        "volume": 0.38
+      },
+      "voice": {
+        "path": "../assets/themes/grandpa-stone/audio/pickup.wav",
+        "volume": 0.55
+      },
+      "explosion": {
+        "path": "../assets/themes/grandpa-stone/audio/impact.wav",
+        "volume": 0.7
+      },
+      "victory": {
+        "path": "../assets/themes/grandpa-stone/audio/victory-ko.mp3",
+        "volume": 0.85
+      }
+    },
+    "orbit_effect": {
+      "path": "../assets/themes/grandpa-stone/sprites/satellite.png",
+      "count": 3,
+      "target_width": 82,
+      "radius_x": 155,
+      "radius_y": 72,
+      "speed_dps": 105,
+      "fps": 30
+    },
+    "sprites": {
+      "walk": {
+        "path": "../assets/themes/grandpa-stone/sprites/walk.png",
+        "cols": 4,
+        "rows": 4,
+        "target_height": 270,
+        "fps": 8,
+        "offset_y": 55
+      },
+      "point": {
+        "path": "../assets/themes/grandpa-stone/sprites/point.png",
+        "cols": 5,
+        "rows": 3,
+        "target_height": 270,
+        "fps": 8
+      },
+      "kick": {
+        "path": "../assets/themes/grandpa-stone/sprites/throw.png",
+        "cols": 5,
+        "rows": 3,
+        "target_height": 270,
+        "fps": 8
+      },
+      "explosion": {
+        "path": "../assets/themes/grandpa-stone/sprites/impact.png",
+        "cols": 5,
+        "rows": 3,
+        "target_height": 180,
+        "fps": 10
+      },
+      "arrival": {
+        "path": "../assets/themes/grandpa-stone/sprites/victory.png",
+        "cols": 5,
+        "rows": 3,
+        "target_height": 270,
+        "fps": 8
+      },
+      "departure": {
+        "path": "../assets/themes/grandpa-stone/sprites/departure.png",
+        "cols": 5,
+        "rows": 3,
+        "target_height": 270,
+        "fps": 8
+      }
+    },
+    "animations": {
+      "below_target": {
+        "offset_y": 130,
+        "spacing": 8,
+        "duration_ms": 0,
+        "items": [
+          {
+            "path": "../assets/themes/grandpa-stone/sprites/happy-cats/happy-cat-cheer.png",
+            "cols": 5,
+            "rows": 3,
+            "target_height": 105,
+            "fps": 10,
+            "start_frame": 0
+          },
+          {
+            "path": "../assets/themes/grandpa-stone/sprites/happy-cats/happy-cat-cheer.png",
+            "cols": 5,
+            "rows": 3,
+            "target_height": 105,
+            "fps": 10,
+            "start_frame": 3
+          },
+          {
+            "path": "../assets/themes/grandpa-stone/sprites/happy-cats/happy-cat-cheer.png",
+            "cols": 5,
+            "rows": 3,
+            "target_height": 105,
+            "fps": 10,
+            "start_frame": 6
+          },
+          {
+            "path": "../assets/themes/grandpa-stone/sprites/happy-cats/happy-cat-cheer.png",
+            "cols": 5,
+            "rows": 3,
+            "target_height": 105,
+            "fps": 10,
+            "start_frame": 9
+          }
+        ]
+      }
+    }
+  }
+}
