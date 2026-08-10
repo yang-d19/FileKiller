@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from resource_config import ResourceConfig, ResourceConfigError
+from filekiller.config import ResourceConfig, ResourceConfigError
 
 
 class ResourceConfigTests(unittest.TestCase):

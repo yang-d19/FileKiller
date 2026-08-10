@@ -35,6 +35,9 @@ python -m venv .venv
 # 手动选择模式
 .\.venv\Scripts\python.exe main.py
 
+# 等价的包入口
+.\.venv\Scripts\python.exe -m filekiller
+
 # 指定目标文件
 .\.venv\Scripts\python.exe main.py "C:\path\to\your\file.txt"
 ```
@@ -127,16 +130,43 @@ $env:MONSTER_DELETER_CONFIG = "D:\themes\my-theme\theme.json"
 
 ```text
 FileKiller/
-├── main.py                  # UI、动画流程、音频播放和右键菜单注册
-├── resource_config.py       # 配置加载、校验和相对路径解析
-├── register_menu.py         # 旧版右键菜单注册脚本
+├── main.py                  # 兼容入口：仍支持 python main.py
+├── resource_config.py       # 兼容入口：转发到 filekiller.config
+├── register_menu.py         # Windows 右键菜单安装入口
+├── filekiller/
+│   ├── cli.py               # 命令行解析和程序启动
+│   ├── config.py            # 配置加载、校验和路径解析
+│   ├── window.py            # 主窗口和动画阶段编排
+│   ├── animation.py         # 精灵图切帧与资源加载
+│   ├── effects.py           # 环绕效果和目标下方动画组
+│   ├── media.py             # 独立音频通道及 BGM 循环
+│   ├── widgets.py           # 对话气泡和选择按钮
+│   ├── filesystem.py        # 移入回收站
+│   └── platform_windows.py  # Windows 右键菜单注册
 ├── requirements.txt         # Python 依赖
 ├── config/
-│   └── default.json         # 默认动画、音频和背景配置
-├── assets/                  # 默认演示资源
+│   ├── default.json         # 默认动画、音频和背景配置
+│   └── grandpa-stone.json   # 示例主题配置
+├── assets/                  # 默认资源及独立主题资源
 ├── scripts/                 # 图片处理辅助脚本
-└── tests/                   # 测试代码
+├── tests/                   # 自动化测试
+└── ARCHITECTURE.md          # 面向维护者和 AI 的代码导航
 ```
+
+## 开发与验证
+
+业务实现都位于 `filekiller/`。修改时先阅读 [ARCHITECTURE.md](ARCHITECTURE.md)，其中记录了启动链、动画时序、模块边界，以及不可随意改变的行为约束。顶层 `main.py` 与 `resource_config.py` 只用于兼容旧命令和旧导入，不应继续堆放业务逻辑。
+
+```powershell
+# 运行无需桌面交互的自动化测试
+.\.venv\Scripts\python.exe -m unittest discover -v
+
+# 检查所有 Python 文件能否编译
+.\.venv\Scripts\python.exe -m compileall -q `
+  filekiller main.py resource_config.py register_menu.py
+```
+
+新增主题通常只需要添加 `config/*.json` 和 `assets/themes/<name>/`，不需要修改 Python。新增动画阶段时，则从 `filekiller/window.py` 的状态机开始，并把具体播放能力放入对应的动画、音频或效果模块。
 
 ## 许可
 
