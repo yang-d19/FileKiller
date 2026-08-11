@@ -26,54 +26,64 @@ FileKiller 是一个支持自定义视觉与声音资源的 Windows 桌面交互
 
 ### 从源码运行
 
-需要 Python 3 和 Windows 系统。
+需要 Python 3.12、[uv](https://docs.astral.sh/uv/) 和 Windows 系统。首次使用可通过 WinGet 安装 uv，然后同步锁定的依赖：
 
 ```powershell
-python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+winget install --id astral-sh.uv -e
+uv sync
 
 # 手动选择模式
-.\.venv\Scripts\python.exe main.py
+uv run python main.py
 
 # 等价的包入口
-.\.venv\Scripts\python.exe -m filekiller
+uv run python -m filekiller
 
 # 指定目标文件
-.\.venv\Scripts\python.exe main.py "C:\path\to\your\file.txt"
+uv run python main.py "C:\path\to\your\file.txt"
+```
+
+应用运行依赖记录在 `pyproject.toml`，完整解析版本由 `uv.lock` 固定。`uv sync` 默认同时安装 `build` 组，以便打包；素材处理和 Windows UI 诊断工具按需安装：
+
+```powershell
+uv sync --group assets
+uv sync --group diagnostics
 ```
 
 ## 自定义动画和音频
 
-默认资源配置位于 `config/default.json`，其中不包含固定的绝对路径。所有相对路径均以配置文件所在目录为基准。
+默认 Theme 是 `grandpa-stone`，资源配置位于 `config/grandpa-stone.json`。其中不包含固定的绝对路径，所有相对路径均以配置文件所在目录为基准。
 
 配置文件管理以下资源：
 
 | 配置项 | 用途 |
 | --- | --- |
+| `resources.context_menu_label` | Windows 文件右键菜单中显示的 Theme 动作名称 |
+| `resources.dialog_text` | 动作完成后显示在气泡中的 Theme 问句 |
+| `resources.choice_delay_ms` | 问句气泡出现后，确认按钮延迟显示的毫秒数 |
 | `resources.background` | 选择界面背景图片 |
 | `resources.audio.bgm` | 背景音乐及音量 |
 | `resources.audio.voice` | 交互语音及音量 |
 | `resources.audio.explosion` | 动作效果音或带音轨的视频文件 |
-| `resources.audio.victory` | 可选的文件成功移入回收站后语音 |
+| `resources.audio.victory` | 可选的胜利语音；预览模式会播放，指定真实文件时仅在成功移入回收站后播放 |
 | `resources.sprites.walk` | 移动阶段序列帧；可用 `offset_y` 调整行走轨迹高度 |
 | `resources.sprites.point` | 交互阶段序列帧 |
 | `resources.sprites.kick` | 主要动作序列帧 |
 | `resources.sprites.explosion` | 特效序列帧 |
 | `resources.sprites.arrival` | 后续入场序列帧 |
-| `resources.sprites.departure` | 退场序列帧 |
-| `resources.animations.below_target` | 可选的目标下方附加动画组，支持多张精灵图、间距、偏移和持续时间；`duration_ms: 0` 表示跟随主动画直到程序退出 |
+| `resources.sprites.departure` | 退场序列帧；可用 `move_duration_ms` 调整时长，`stabilize_x` 消除帧间前后晃动，`move_wave_cycles` 和 `move_wave_strength` 设置始终向前的走路速度波动 |
+| `resources.animations.below_target` | 可选的目标下方附加动画组，支持多张精灵图、间距、偏移、持续时间，以及 `bounce_height`、`bounce_period_ms`、`bounce_fps` 上下跳动参数；`duration_ms: 0` 表示跟随主动画直到程序退出 |
 | `resources.orbit_effect` | 可选的目标点环绕素材、数量、轨道半径、速度和 FPS |
 
 复制默认配置并修改资源路径即可创建新主题：
 
 ```powershell
-Copy-Item config\default.json config\my-theme.json
+Copy-Item config\grandpa-stone.json config\my-theme.json
 
 # 编辑 my-theme.json 后运行
-.\.venv\Scripts\python.exe main.py --config config\my-theme.json
+uv run python main.py --config config\my-theme.json
 
 # 同时指定目标文件
-.\.venv\Scripts\python.exe main.py --config config\my-theme.json "C:\path\to\your\file.txt"
+uv run python main.py --config config\my-theme.json "C:\path\to\your\file.txt"
 ```
 
 也可以将配置和素材放在独立目录中：
@@ -95,20 +105,20 @@ my-theme/
 然后直接加载：
 
 ```powershell
-.\.venv\Scripts\python.exe main.py --config "D:\themes\my-theme\theme.json"
+uv run python main.py --config "D:\themes\my-theme\theme.json"
 ```
 
-仓库还包含一套“拾取石子并击落应用窗口”的原创示例主题：
+默认的 `grandpa-stone` Theme 会播放“拾取石子并击落应用窗口”的原创动画，无需传入 `--config`：
 
 ```powershell
-.\.venv\Scripts\python.exe main.py --config config\grandpa-stone.json
+uv run python main.py
 ```
 
 还可以通过环境变量选择配置：
 
 ```powershell
 $env:MONSTER_DELETER_CONFIG = "D:\themes\my-theme\theme.json"
-.\.venv\Scripts\python.exe main.py
+uv run python main.py
 ```
 
 使用 `--config` 启动一次程序后，Windows 右键菜单会记住该配置文件。配置加载器会在启动阶段检查 JSON 格式、配置版本、必需字段和所有资源路径，错误会直接显示在终端中。
@@ -116,15 +126,18 @@ $env:MONSTER_DELETER_CONFIG = "D:\themes\my-theme\theme.json"
 ## 打包发布
 
 ```powershell
-.\.venv\Scripts\pyinstaller.exe --noconfirm --onefile --windowed `
+uv run pyinstaller --noconfirm --onefile --windowed `
   --name FileKiller `
   --add-data "assets;assets" `
   --add-data "config;config" `
   --hidden-import send2trash `
   main.py
+
+# 将右键菜单更新为调用无控制台的 dist\FileKiller.exe
+uv run python register_menu.py
 ```
 
-生成文件位于 `dist/FileKiller.exe`。默认配置和默认资源会被嵌入程序，也可以继续使用 `--config` 加载程序外部的主题配置和素材。
+生成文件位于 `dist/FileKiller.exe`。双击运行时默认使用已嵌入的 `grandpa-stone` Theme，无需传入 `--config`；仍可使用 `--config` 加载其他外部主题。
 
 ## 项目结构
 
@@ -143,10 +156,11 @@ FileKiller/
 │   ├── widgets.py           # 对话气泡和选择按钮
 │   ├── filesystem.py        # 移入回收站
 │   └── platform_windows.py  # Windows 右键菜单注册
-├── requirements.txt         # Python 依赖
+├── pyproject.toml           # 项目元数据与分组依赖
+├── uv.lock                  # 可复现的完整依赖锁
 ├── config/
-│   ├── default.json         # 默认动画、音频和背景配置
-│   └── grandpa-stone.json   # 示例主题配置
+│   ├── default.json         # 旧版基础主题配置
+│   └── grandpa-stone.json   # 默认主题配置
 ├── assets/                  # 默认资源及独立主题资源
 ├── scripts/                 # 图片处理辅助脚本
 ├── tests/                   # 自动化测试
@@ -159,10 +173,10 @@ FileKiller/
 
 ```powershell
 # 运行无需桌面交互的自动化测试
-.\.venv\Scripts\python.exe -m unittest discover -v
+uv run python -m unittest discover -v
 
 # 检查所有 Python 文件能否编译
-.\.venv\Scripts\python.exe -m compileall -q `
+uv run python -m compileall -q `
   filekiller main.py resource_config.py register_menu.py
 ```
 

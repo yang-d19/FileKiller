@@ -33,7 +33,10 @@ def run(argv=None):
     except ResourceConfigError as exc:
         raise SystemExit(f"Configuration error: {exc}") from exc
 
-    register_context_menu(resources.source_path if config_override else None)
+    register_context_menu(
+        resources.source_path if config_override else None,
+        label=resources.context_menu_label,
+    )
 
     # Delay UI imports so configuration and CLI helpers stay cheap to inspect
     # and test without creating a graphical application.

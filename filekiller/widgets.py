@@ -90,8 +90,8 @@ class ChoicesWidget(QWidget):
 
         layout = QHBoxLayout()
         layout.setSpacing(15)
-        self.btn1 = QPushButton("是的")
-        self.btn2 = QPushButton("嘤嘤嘤就是这个")
+        self.btn1 = QPushButton("是的 😡")
+        self.btn2 = QPushButton("嘤嘤嘤就是这个 🥺")
 
         button_style = """
             QPushButton {

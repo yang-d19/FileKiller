@@ -2,7 +2,7 @@
 
 import math
 
-from PyQt6.QtCore import QObject, Qt, QTimer
+from PyQt6.QtCore import QElapsedTimer, QObject, QPoint, Qt, QTimer
 from PyQt6.QtGui import QPixmap
 from PyQt6.QtWidgets import QLabel
 
@@ -90,15 +90,21 @@ class AnimationGroupController(QObject):
         self.host = host
         self.sprite_loader = sprite_loader
         self.animators = []
+        self.base_positions = []
+        self.group = None
         self.stop_timer = QTimer(self)
         self.stop_timer.setSingleShot(True)
         self.stop_timer.timeout.connect(self.stop)
+        self.bounce_clock = QElapsedTimer()
+        self.bounce_timer = QTimer(self)
+        self.bounce_timer.timeout.connect(self.update_bounce_positions)
 
     def start(self, target_pos, group):
         if not group or target_pos is None:
             return
 
         self.stop()
+        self.group = group
         loaded = []
         for index, spec in enumerate(group["items"]):
             animator = SpriteAnimator(self.host)
@@ -119,19 +125,50 @@ class AnimationGroupController(QObject):
 
         current_x = start_x
         for animator, fps in loaded:
-            animator.move(current_x, top_y + max_height - animator.height())
+            base_position = QPoint(
+                current_x, top_y + max_height - animator.height()
+            )
+            animator.move(base_position)
             animator.show()
             animator.play(fps=fps, loop=True)
             self.animators.append(animator)
+            self.base_positions.append(base_position)
             current_x += animator.width() + spacing
+
+        if group["bounce_height"] > 0:
+            self.bounce_clock.start()
+            self.update_bounce_positions()
+            self.bounce_timer.start(max(1, 1000 // group["bounce_fps"]))
 
         if group["duration_ms"] > 0:
             self.stop_timer.start(group["duration_ms"])
 
+    def update_bounce_positions(self):
+        if not self.animators or self.group is None:
+            return
+        self._apply_bounce(self.bounce_clock.elapsed())
+
+    def _apply_bounce(self, elapsed_ms):
+        """Move the group in a staggered upward-only jumping wave."""
+
+        period_ms = self.group["bounce_period_ms"]
+        height = self.group["bounce_height"]
+        phase_step = 2 * math.pi / len(self.animators)
+        time_phase = 2 * math.pi * elapsed_ms / period_ms
+
+        for index, (animator, base_position) in enumerate(
+            zip(self.animators, self.base_positions)
+        ):
+            jump = height * max(0.0, math.sin(time_phase + index * phase_step))
+            animator.move(base_position.x(), max(0, base_position.y() - round(jump)))
+
     def stop(self):
         self.stop_timer.stop()
+        self.bounce_timer.stop()
         for animator in self.animators:
             animator.stop()
             animator.hide()
             animator.deleteLater()
         self.animators.clear()
+        self.base_positions.clear()
+        self.group = None

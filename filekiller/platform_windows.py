@@ -41,7 +41,7 @@ def build_context_menu_command(
     return command, "shell32.dll,32"
 
 
-def register_context_menu(config_path=None, *, executable=None):
+def register_context_menu(config_path=None, *, executable=None, label=None):
     """Create or refresh the current-user Windows file context-menu entry."""
 
     if sys.platform != "win32":
@@ -54,8 +54,9 @@ def register_context_menu(config_path=None, *, executable=None):
         command, icon = build_context_menu_command(
             config_path, executable=executable
         )
+        menu_label = label or CONTEXT_MENU_LABEL
         with winreg.CreateKey(winreg.HKEY_CURRENT_USER, CONTEXT_MENU_KEY) as key:
-            winreg.SetValue(key, "", winreg.REG_SZ, CONTEXT_MENU_LABEL)
+            winreg.SetValue(key, "", winreg.REG_SZ, menu_label)
             winreg.SetValueEx(key, "Icon", 0, winreg.REG_SZ, icon)
 
         with winreg.CreateKey(

@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 
-DEFAULT_CONFIG_RELATIVE_PATH = Path("config") / "default.json"
+DEFAULT_CONFIG_RELATIVE_PATH = Path("config") / "grandpa-stone.json"
 CONFIG_ENV_VAR = "MONSTER_DELETER_CONFIG"
 REQUIRED_AUDIO = ("bgm", "voice", "explosion")
 REQUIRED_SPRITES = ("walk", "point", "kick", "explosion", "arrival", "departure")
@@ -71,6 +71,18 @@ class ResourceConfig:
 
         self.background_path = self._resolve_file(
             resources.get("background"), "resources.background"
+        )
+        self.dialog_text = self._non_empty_string(
+            resources.get("dialog_text", "喂，是这个吗？"),
+            "resources.dialog_text",
+        )
+        self.choice_delay_ms = self._non_negative_int(
+            resources.get("choice_delay_ms", 0),
+            "resources.choice_delay_ms",
+        )
+        self.context_menu_label = self._non_empty_string(
+            resources.get("context_menu_label", "召唤大将怪兽摧毁"),
+            "resources.context_menu_label",
         )
         self._audio = self._load_audio(resources.get("audio"))
         self._sprites = self._load_sprites(resources.get("sprites"))
@@ -218,6 +230,16 @@ class ResourceConfig:
                 "duration_ms": self._non_negative_int(
                     group.get("duration_ms", 3000), f"{label}.duration_ms"
                 ),
+                "bounce_height": self._non_negative_int(
+                    group.get("bounce_height", 0), f"{label}.bounce_height"
+                ),
+                "bounce_period_ms": self._positive_int(
+                    group.get("bounce_period_ms", 700),
+                    f"{label}.bounce_period_ms",
+                ),
+                "bounce_fps": self._positive_int(
+                    group.get("bounce_fps", 30), f"{label}.bounce_fps"
+                ),
                 "items": [
                     self._load_sprite_spec(item, f"{label}.items[{index}]")
                     for index, item in enumerate(items)
@@ -238,6 +260,15 @@ class ResourceConfig:
                     f"{label}.frame_indices must be a list of non-negative integers"
                 )
 
+        move_wave_strength = self._number(
+            spec.get("move_wave_strength", 0.0),
+            f"{label}.move_wave_strength",
+        )
+        if not 0.0 <= move_wave_strength < 1.0:
+            raise ResourceConfigError(
+                f"{label}.move_wave_strength must be at least 0 and less than 1"
+            )
+
         return {
             "path": self._resolve_file(spec.get("path"), f"{label}.path"),
             "cols": self._positive_int(spec.get("cols", 5), f"{label}.cols"),
@@ -250,6 +281,18 @@ class ResourceConfig:
                 spec.get("start_frame", 0), f"{label}.start_frame"
             ),
             "offset_y": self._integer(spec.get("offset_y", 0), f"{label}.offset_y"),
+            "move_duration_ms": self._positive_int(
+                spec.get("move_duration_ms", 2000),
+                f"{label}.move_duration_ms",
+            ),
+            "move_wave_cycles": self._non_negative_int(
+                spec.get("move_wave_cycles", 0),
+                f"{label}.move_wave_cycles",
+            ),
+            "move_wave_strength": move_wave_strength,
+            "stabilize_x": self._boolean(
+                spec.get("stabilize_x", False), f"{label}.stabilize_x"
+            ),
             "frame_indices": frame_indices,
         }
 
@@ -288,4 +331,16 @@ class ResourceConfig:
     def _integer(value, label):
         if isinstance(value, bool) or not isinstance(value, int):
             raise ResourceConfigError(f"{label} must be an integer")
+        return value
+
+    @staticmethod
+    def _boolean(value, label):
+        if not isinstance(value, bool):
+            raise ResourceConfigError(f"{label} must be a boolean")
+        return value
+
+    @staticmethod
+    def _non_empty_string(value, label):
+        if not isinstance(value, str) or not value.strip():
+            raise ResourceConfigError(f"{label} must be a non-empty string")
         return value

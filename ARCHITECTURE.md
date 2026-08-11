@@ -52,7 +52,7 @@ python main.py
 ## 必须保持的行为约束
 
 - 文件只通过 `send2trash` 移入回收站，不做永久删除。
-- 只有成功移入回收站后才播放可选的 `victory` 语音。
+- 无目标文件的预览模式会播放完整的可选 `victory` 语音；指定真实文件时，只有成功移入回收站后才播放，删除失败不得误报成功。
 - 卫星从选定目标点后开始，在爆炸触发时消失。
 - `below_target.duration_ms` 为 `0` 时，附加动画持续到主角色退场；大于 `0` 时按配置停止。
 - 精灵图的相对资源路径以其 JSON 配置文件所在目录为基准。
@@ -77,9 +77,9 @@ python main.py
 ## 验证
 
 ```powershell
-.\.venv\Scripts\python.exe -m unittest discover -v
+uv run python -m unittest discover -v
 
-.\.venv\Scripts\python.exe -m compileall -q `
+uv run python -m compileall -q `
   filekiller main.py resource_config.py register_menu.py
 ```
 

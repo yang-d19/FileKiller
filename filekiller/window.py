@@ -1,9 +1,12 @@
 """Main transparent overlay and the destruction-animation state machine."""
 
+import math
+
 from PyQt6.QtCore import (
     QEasingCurve,
     QPoint,
     QPropertyAnimation,
+    QTimer,
     Qt,
     pyqtProperty,
 )
@@ -25,6 +28,21 @@ def _disconnect_signal(signal):
         signal.disconnect()
     except TypeError:
         pass
+
+
+def _should_play_victory(target_file, deleted):
+    """Play the cue after a successful deletion or in no-file preview mode."""
+
+    return deleted or target_file is None
+
+
+def _walking_progress(progress, cycles, strength):
+    """Return monotonic travel with a periodic walking-speed modulation."""
+
+    if cycles <= 0 or strength <= 0:
+        return progress
+    angle = 2 * math.pi * cycles * progress
+    return progress - strength * math.sin(angle) / (2 * math.pi * cycles)
 
 
 class FileKillerWindow(QWidget):
@@ -66,8 +84,11 @@ class FileKillerWindow(QWidget):
         )
         self.below_target_animators = self.below_target_effect.animators
 
-        self.bubble = BubbleWidget("喂，是这个吗？")
+        self.bubble = BubbleWidget(self.resources.dialog_text)
         self.choices = ChoicesWidget()
+        self.choice_timer = QTimer(self)
+        self.choice_timer.setSingleShot(True)
+        self.choice_timer.timeout.connect(self.choices.show)
         self.init_audio()
         self.init_targeting_ui()
 
@@ -270,9 +291,14 @@ class FileKillerWindow(QWidget):
         self.choices.move(choices_x, choices_y)
         _disconnect_signal(self.choices.choiceMade)
         self.choices.choiceMade.connect(self.start_phase3_kick)
-        self.choices.show()
+        self.choices.hide()
+        if self.resources.choice_delay_ms > 0:
+            self.choice_timer.start(self.resources.choice_delay_ms)
+        else:
+            self.choices.show()
 
     def start_phase3_kick(self):
+        self.choice_timer.stop()
         self.bubble.hide()
         _disconnect_signal(self.animator.animationFinished)
         _disconnect_signal(self.animator.frameChanged)
@@ -303,7 +329,8 @@ class FileKillerWindow(QWidget):
         )
         self.explosion_animator.play(fps=fps, loop=False)
 
-        if self.delete_target_file():
+        deleted = self.delete_target_file()
+        if _should_play_victory(self.target_file, deleted):
             self.play_victory_voice()
 
     def play_victory_voice(self):
@@ -331,17 +358,33 @@ class FileKillerWindow(QWidget):
         self.animator.play(fps=fps, loop=True)
 
         screen = QApplication.primaryScreen().geometry()
-        self.move_anim2 = QPropertyAnimation(self.animator, b"pos")
-        self.move_anim2.setDuration(2000)
-        self.move_anim2.setStartValue(self.animator.pos())
-        self.move_anim2.setEndValue(QPoint(screen.width() + 200, self.animator.pos().y()))
-        self.move_anim2.setEasingCurve(QEasingCurve.Type.InQuad)
+        property_name = b"motion_position" if self.animator.stabilize_x else b"pos"
+        start_position = (
+            self.animator.motion_position
+            if self.animator.stabilize_x
+            else self.animator.pos()
+        )
+        self.move_anim2 = QPropertyAnimation(self.animator, property_name)
+        self.move_anim2.setDuration(self.animator.move_duration_ms)
+        self.move_anim2.setStartValue(start_position)
+        self.move_anim2.setEndValue(QPoint(screen.width() + 200, start_position.y()))
+        if self.animator.move_wave_cycles > 0:
+            cycles = self.animator.move_wave_cycles
+            strength = self.animator.move_wave_strength
+            self.departure_easing = QEasingCurve(QEasingCurve.Type.Linear)
+            self.departure_easing.setCustomType(
+                lambda progress: _walking_progress(progress, cycles, strength)
+            )
+            self.move_anim2.setEasingCurve(self.departure_easing)
+        else:
+            self.move_anim2.setEasingCurve(QEasingCurve.Type.InQuad)
         self.move_anim2.finished.connect(self.on_app_exit)
         self.move_anim2.start()
 
     # ---- Shutdown ------------------------------------------------------
 
     def _stop_runtime_resources(self):
+        self.choice_timer.stop()
         self.stop_satellite_orbit()
         self.stop_below_target_animations()
         self.audio.stop_all()

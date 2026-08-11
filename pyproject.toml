@@ -1,0 +1,34 @@
+[project]
+name = "filekiller"
+version = "0.1.0"
+description = "Configurable Windows desktop file deletion animations"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    # Qt 6.11.1 fails to load its runtime DLLs in the supported Windows setup.
+    # Keep the application on the known-good Qt 6.7 release line.
+    "pyqt6==6.7.1",
+    "pyqt6-qt6==6.7.3",
+    "send2trash>=1.8.3,<2",
+]
+
+[dependency-groups]
+dev = [
+    { include-group = "build" },
+]
+build = [
+    "pyinstaller>=6.0.0,<7",
+]
+assets = [
+    "numpy>=2.2.0,<3",
+    "opencv-python>=4.11.0,<5",
+    "pillow>=10.3.0,<13",
+    "rembg>=2.0.0,<3",
+]
+diagnostics = [
+    "pynput>=1.7.0,<2",
+    "uiautomation>=2.0.0,<3; sys_platform == 'win32'",
+]
+
+[tool.uv]
+default-groups = ["dev"]
